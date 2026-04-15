@@ -1,0 +1,60 @@
+#!/home/carsten/trinity-vlm/scripts/train_fsdp2.py
+
+[model]
+trinity_model = "arcee-ai/Trinity-Nano-Preview"
+moondream_model = "moondream/moondream3-preview"
+projector_hidden_dim = 2048
+local_files_only = true
+
+[data]
+dataset = "anthracite-org/pixmo-cap-images"
+split = "train"
+prompt_text = "Describe the image in detail."
+max_prompt_tokens = 64
+max_caption_tokens = 192
+max_seq_len = 1536
+packing_buffer_size = 4
+shuffle_buffer_size = 16
+limit = 16
+streaming = true
+
+[train]
+output_dir = "checkpoints/smoke-fsdp2"
+max_steps = 2
+grad_accum_steps = 1
+learning_rate = 0.0002
+weight_decay = 0.01
+warmup_steps = 0
+max_grad_norm = 1.0
+dtype = "bfloat16"
+device = "cuda"
+seed = 0
+log_every = 1
+activation_checkpointing = true
+torch_compile = false
+tf32 = true
+
+[unfreeze]
+train_vision = false
+train_trinity = false
+train_lm_head = false
+unfreeze_last_n_layers = 0
+
+[fsdp]
+enabled = true
+reshard_after_forward = true
+param_dtype = "bfloat16"
+reduce_dtype = "float32"
+cast_forward_inputs = true
+cpu_offload = false
+
+[distributed]
+nproc_per_node = 2
+nnodes = 1
+node_rank = 0
+master_addr = "127.0.0.1"
+master_port = 29501
+backend = "nccl"
+
+[checkpoint]
+save_every = 2

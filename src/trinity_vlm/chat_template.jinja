@@ -1,0 +1,101 @@
+{%- macro render_content(content, is_system_content=false) -%}
+    {%- if content is string -%}
+        {{- content -}}
+    {%- elif content is iterable and content is not mapping -%}
+        {%- for item in content -%}
+            {%- if item is string -%}
+                {{- item -}}
+            {%- elif "image" in item or "image_url" in item or item.type == "image" -%}
+                {%- if is_system_content -%}
+                    {{- raise_exception("System message cannot contain images.") -}}
+                {%- endif -%}
+                {{- "<|vision_start|>" -}}
+                {%- for _ in range(image_seq_len | default(729)) -%}
+                    {{- "<|image_pad|>" -}}
+                {%- endfor -%}
+                {{- "<|vision_end|>" -}}
+                {%- if not loop.last -%}
+                    {%- set next_item = loop.nextitem -%}
+                    {%- if next_item is string or "text" in next_item or next_item.type == "text" -%}
+                        {{- "\n" -}}
+                    {%- endif -%}
+                {%- endif -%}
+            {%- elif "text" in item or item.type == "text" -%}
+                {%- if item.text is defined -%}
+                    {{- item.text -}}
+                {%- else -%}
+                    {{- item["text"] -}}
+                {%- endif -%}
+            {%- elif item is none -%}
+                {{- "" -}}
+            {%- else -%}
+                {{- raise_exception("Unexpected item type in content.") -}}
+            {%- endif -%}
+        {%- endfor -%}
+    {%- elif content is none or content is undefined -%}
+        {{- "" -}}
+    {%- else -%}
+        {{- raise_exception("Unexpected content type.") -}}
+    {%- endif -%}
+{%- endmacro -%}
+{%- if tools %}
+    {{- '<|im_start|>system\n' }}
+    {%- if messages[0].role == 'system' %}
+        {{- render_content(messages[0].content, true) + '\n\n' }}
+    {%- endif %}
+    {{- "# Tools\n\nYou may call one or more functions to assist with the user query.\n\nYou are provided with function signatures within <tools></tools> XML tags:\n<tools>" }}
+    {%- for tool in tools %}
+        {{- "\n" }}
+        {{- tool | tojson }}
+    {%- endfor %}
+    {{- "\n</tools>\n\nFor each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:\n<tool_call>\n{\"name\": <function-name>, \"arguments\": <args-json-object>}\n</tool_call><|im_end|>\n" }}
+{%- else %}
+    {%- if messages[0].role == 'system' %}
+        {{- '<|im_start|>system\n' + render_content(messages[0].content, true) + '<|im_end|>\n' }}
+    {%- endif %}
+{%- endif %}
+{%- for message in messages %}
+    {%- set content = render_content(message.content) %}
+    {%- if (message.role == "user") or (message.role == "system" and not loop.first) %}
+        {{- '<|im_start|>' + message.role + '\n' + content + '<|im_end|>' + '\n' }}
+    {%- elif message.role == "assistant" %}
+        {{- '<|im_start|>' + message.role + '\n' }}
+        {% generation %}
+        {{- content}}
+        {%- if message.tool_calls %}
+            {%- for tool_call in message.tool_calls %}
+                {%- if (loop.first and content) or (not loop.first) %}
+                    {{- '\n' }}
+                {%- endif %}
+                {%- if tool_call.function %}
+                    {%- set tool_call = tool_call.function %}
+                {%- endif %}
+                {{- '<tool_call>\n{"name": "' }}
+                {{- tool_call.name }}
+                {{- '", "arguments": ' }}
+                {%- if tool_call.arguments is string %}
+                    {{- tool_call.arguments }}
+                {%- else %}
+                    {{- tool_call.arguments | tojson }}
+                {%- endif %}
+                {{- '}\n</tool_call>' }}
+            {%- endfor %}
+        {%- endif %}
+        {{- '<|im_end|>' }}
+        {% endgeneration%}
+        {{- '\n' }}
+    {%- elif message.role == "tool" %}
+        {%- if loop.first or (messages[loop.index0 - 1].role != "tool") %}
+            {{- '<|im_start|>user' }}
+        {%- endif %}
+        {{- '\n<tool_response>\n' }}
+        {{- content }}
+        {{- '\n</tool_response>' }}
+        {%- if loop.last or (messages[loop.index0 + 1].role != "tool") %}
+            {{- '<|im_end|>\n' }}
+        {%- endif %}
+    {%- endif %}
+{%- endfor %}
+{%- if add_generation_prompt %}
+    {{- '<|im_start|>assistant\n' }}
+{%- endif %}

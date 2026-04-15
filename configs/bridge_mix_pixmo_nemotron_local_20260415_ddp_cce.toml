@@ -1,0 +1,118 @@
+#!/home/carsten/trinity-vlm/scripts/train_ddp.py
+
+[model]
+trinity_model = "arcee-ai/Trinity-Nano-Preview"
+moondream_model = "moondream/moondream3-preview"
+projector_hidden_dim = 2048
+use_cut_cross_entropy = true
+cut_cross_entropy_impl = "cce"
+local_files_only = true
+
+[data]
+dataset = "anthracite-org/pixmo-cap-images"
+split = "train"
+cap_qa_dataset = "anthracite-org/pixmo-cap-qa-images"
+cap_qa_split = "train"
+cap_qa_shard_start = 0
+cap_qa_shard_end = 11
+point_explanations_dataset = "anthracite-org/pixmo-point-explanations-images"
+point_explanations_split = "train"
+point_explanations_shard_start = 0
+point_explanations_shard_end = 2
+prompt_text = "Describe the image in detail."
+user_message_template = "{image}\n{prompt}"
+max_prompt_tokens = 512
+max_caption_tokens = 512
+max_chat_input_tokens = 2048
+max_chat_output_tokens = 512
+max_seq_len = 3072
+packing_buffer_size = 2
+shuffle_buffer_size = 32
+streaming = false
+cache_shards_locally = true
+local_files_only = true
+shard_start = 0
+shard_end = 33
+caption_mix_weight = 0.2
+cap_qa_mix_weight = 0.3
+chat_mix_weight = 0.0
+chat_with_irrelevant_image_mix_weight = 0.25
+point_explanations_mix_weight = 0.25
+chat_dataset = "nvidia/Llama-Nemotron-Post-Training-Dataset"
+chat_dataset_config_name = "SFT"
+chat_split = "chat"
+chat_local_path = "prepared_data/nemotron_chat_train_local.jsonl"
+
+[validation]
+enabled = true
+every = 50
+max_batches = 16
+shuffle_buffer_size = 0
+streaming = false
+packing_buffer_size = 2
+cache_shards_locally = true
+local_files_only = true
+shard_start = 72
+shard_end = 74
+caption_mix_weight = 1.0
+chat_mix_weight = 0.0
+chat_with_irrelevant_image_mix_weight = 0.0
+
+[wandb]
+enabled = true
+project = "trinity-vlm"
+name = "bridge-mix-pixmo-nemotron-local-20260415-ddp-cce"
+mode = "online"
+tags = ["bridge", "ddp", "cce", "pixmo", "nemotron", "irrelevant-image", "grounded-only", "local-data", "online"]
+
+[profiling]
+enabled = false
+synchronize_cuda = false
+
+[train]
+output_dir = "checkpoints/bridge-mix-pixmo-nemotron-local-20260415-ddp-cce"
+max_steps = 10000
+grad_accum_steps = 8
+optimizer = "muon"
+learning_rate = 0.0002
+weight_decay = 0.01
+muon_momentum = 0.95
+muon_nesterov = true
+muon_ns_steps = 5
+muon_adjust_lr_fn = "match_rms_adamw"
+warmup_steps = 100
+max_grad_norm = 1.0
+dtype = "bfloat16"
+device = "cuda"
+seed = 0
+log_every = 1
+activation_checkpointing = true
+torch_compile = false
+tf32 = true
+
+[unfreeze]
+train_vision = false
+train_trinity = false
+train_lm_head = false
+unfreeze_last_n_layers = 0
+
+[fsdp]
+enabled = false
+
+[ddp]
+broadcast_buffers = false
+find_unused_parameters = false
+gradient_as_bucket_view = true
+static_graph = false
+
+[distributed]
+nproc_per_node = 2
+nnodes = 1
+node_rank = 0
+master_addr = "127.0.0.1"
+master_port = 29563
+backend = "nccl"
+
+[checkpoint]
+save_every = 250
+resume_from = "latest"
